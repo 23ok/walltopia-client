@@ -2,7 +2,7 @@
 <html lang="pt-BR">
 <head>
   <meta charset="UTF-8">
-  <title>Walltopia - HUD, Movimentação e Grid</title>
+  <title>Walltopia - Multiplayer</title>
   <style>
     body { margin: 0; font-family: sans-serif; height: 100vh; display: flex; flex-direction: column; }
     .top-bar { display: flex; align-items: center; justify-content: space-between; background: #333; color: #fff; padding: 8px; }
@@ -17,6 +17,9 @@
     button { background: #666; border: none; color: #fff; padding: 6px 12px; cursor: pointer; }
     button:hover { background: #777; }
   </style>
+  <!-- Biblioteca Socket.IO cliente -->
+  <script src="https://cdn.socket.io/4.6.1/socket.io.min.js"></script>
+  <!-- Biblioteca Phaser 3 -->
   <script src="https://cdn.jsdelivr.net/npm/phaser@3/dist/phaser.min.js"></script>
 </head>
 <body>
@@ -50,57 +53,118 @@
     <button>🍴 Comer (5)</button>
     <button>👕 Vestir (6)</button>
   </div>
+
   <script>
+    // ----------------------------------------
+    // 1) Conecta ao servidor WebSocket (substitua a URL)
+    // ----------------------------------------
+    const socket = io('https://0803cfd3-ab2a-4b96-bf35-eb788a29f988-00-2jhigdrm8gnnu.worf.replit.dev'); 
+    const otherPlayers = {}; // guarda sprites dos outros jogadores
+
+    socket.on('connect', () => {
+      console.log('Conectado ao servidor com id', socket.id);
+    });
+
+    socket.on('playerMoved', data => {
+      const scene = game.scene.scenes[0];
+      if (!otherPlayers[data.id]) {
+        // cria um retângulo verde para esse outro jogador
+        otherPlayers[data.id] = scene.add.rectangle(data.x, data.y, 32, 48, 0x00ff00);
+      } else {
+        otherPlayers[data.id].x = data.x;
+        otherPlayers[data.id].y = data.y;
+      }
+    });
+
+    socket.on('playerDisconnected', id => {
+      if (otherPlayers[id]) {
+        otherPlayers[id].destroy();
+        delete otherPlayers[id];
+      }
+    });
+
+    // ----------------------------------------
+    // 2) Configuração do Phaser
+    // ----------------------------------------
     const config = {
       type: Phaser.AUTO,
       parent: 'game-container',
       width: window.innerWidth,
-      height: window.innerHeight - document.querySelector('.top-bar').offsetHeight - document.querySelector('.bottom-section').offsetHeight - document.querySelector('.actions').offsetHeight,
+      height: window.innerHeight 
+              - document.querySelector('.top-bar').offsetHeight
+              - document.querySelector('.bottom-section').offsetHeight
+              - document.querySelector('.actions').offsetHeight,
       physics: { default: 'arcade', arcade: { gravity: { y: 500 }, debug: false } },
       scene: { preload, create, update }
     };
     const game = new Phaser.Game(config);
 
     function preload() {
-      // Assets de teste
+      // Sem assets externos
     }
 
     function create() {
       const { width, height } = this.scale;
-      // Grid 200x200
+
+      // Grid de células 200×200
       const cellSize = 200;
       const grid = this.add.graphics();
       grid.lineStyle(2, 0x00ff00, 0.5);
       for (let x = 0; x <= width; x += cellSize) {
-        grid.moveTo(x, 0);
-        grid.lineTo(x, height);
+        grid.moveTo(x, 0); grid.lineTo(x, height);
       }
       for (let y = 0; y <= height; y += cellSize) {
-        grid.moveTo(0, y);
-        grid.lineTo(width, y);
+        grid.moveTo(0, y); grid.lineTo(width, y);
       }
       grid.strokePath();
-      // Sprite do jogador
+
+      // Textura simples para o jogador (retângulo vermelho)
       const g = this.add.graphics();
       g.fillStyle(0xff0000, 1);
       g.fillRect(0, 0, 32, 48);
       g.generateTexture('player', 32, 48);
       g.destroy();
+
+      // Cria o sprite do jogador
       this.player = this.physics.add.sprite(width/2, height/2, 'player');
       this.player.setCollideWorldBounds(true);
+
+      // Controles
       this.keys = this.input.keyboard.addKeys({ left: 'A', right: 'D', jump: 'SPACE' });
-      this.cameras.main.setBounds(0,0,width,height);
+
+      // Câmera
+      this.cameras.main.setBounds(0, 0, width, height);
       this.cameras.main.startFollow(this.player);
-      document.getElementById('zoom-in').addEventListener('click', ()=>this.cameras.main.zoom+=0.1);
-      document.getElementById('zoom-out').addEventListener('click', ()=>this.cameras.main.zoom=Math.max(0.5,this.cameras.main.zoom-0.1));
+
+      // Zoom via botões
+      document.getElementById('zoom-in').addEventListener('click', () => {
+        this.cameras.main.zoom += 0.1;
+      });
+      document.getElementById('zoom-out').addEventListener('click', () => {
+        this.cameras.main.zoom = Math.max(0.5, this.cameras.main.zoom - 0.1);
+      });
     }
 
     function update() {
-      const speed=200, onGround=this.player.body.blocked.down;
-      if(this.keys.left.isDown) this.player.setVelocityX(-speed);
-      else if(this.keys.right.isDown) this.player.setVelocityX(speed);
-      else this.player.setVelocityX(0);
-      if(Phaser.Input.Keyboard.JustDown(this.keys.jump)&&onGround) this.player.setVelocityY(-400);
+      const speed = 200;
+      const onGround = this.player.body.blocked.down;
+
+      // Movimento horizontal
+      if (this.keys.left.isDown) {
+        this.player.setVelocityX(-speed);
+      } else if (this.keys.right.isDown) {
+        this.player.setVelocityX(speed);
+      } else {
+        this.player.setVelocityX(0);
+      }
+
+      // Pulo
+      if (Phaser.Input.Keyboard.JustDown(this.keys.jump) && onGround) {
+        this.player.setVelocityY(-400);
+      }
+
+      // Emite posição ao servidor
+      socket.emit('move', { x: this.player.x, y: this.player.y });
     }
   </script>
 </body>
