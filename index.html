@@ -1,0 +1,107 @@
+<!DOCTYPE html>
+<html lang="pt-BR">
+<head>
+  <meta charset="UTF-8">
+  <title>Walltopia - HUD, Movimentação e Grid</title>
+  <style>
+    body { margin: 0; font-family: sans-serif; height: 100vh; display: flex; flex-direction: column; }
+    .top-bar { display: flex; align-items: center; justify-content: space-between; background: #333; color: #fff; padding: 8px; }
+    .middle { flex: 1; position: relative; background: #000; }
+    #game-container { width: 100%; height: 100%; }
+    .bottom-section { display: flex; }
+    .chat { flex: 1; background: #222; color: #fff; padding: 8px; min-height: 150px; overflow-y: auto; }
+    .inventory { width: 200px; background: #444; color: #fff; padding: 8px; }
+    .inventory-grid { display: grid; grid-template-columns: repeat(3, 1fr); gap: 4px; margin-top: 8px; }
+    .slot { width: 40px; height: 40px; border: 1px solid #fff; }
+    .actions { background: #555; color: #fff; padding: 8px; display: flex; justify-content: space-around; }
+    button { background: #666; border: none; color: #fff; padding: 6px 12px; cursor: pointer; }
+    button:hover { background: #777; }
+  </style>
+  <script src="https://cdn.jsdelivr.net/npm/phaser@3/dist/phaser.min.js"></script>
+</head>
+<body>
+  <div class="top-bar">
+    <div>Walltopia</div>
+    <div>Level: 1 | XP: 0/100</div>
+    <div>Zoom: <button id="zoom-out">-</button> <button id="zoom-in">+</button></div>
+  </div>
+  <div class="middle">
+    <div id="game-container"></div>
+  </div>
+  <div class="bottom-section">
+    <div class="chat">
+      <p>Sistema de chat inicializado...</p>
+    </div>
+    <div class="inventory">
+      <div>Inventário (3×3)</div>
+      <div class="inventory-grid">
+        <div class="slot"></div><div class="slot"></div><div class="slot"></div>
+        <div class="slot"></div><div class="slot"></div><div class="slot"></div>
+        <div class="slot"></div><div class="slot"></div><div class="slot"></div>
+      </div>
+      <div style="margin-top: 12px;">Vestir: [slot roupa]</div>
+    </div>
+  </div>
+  <div class="actions">
+    <button>⚔️ Bater (1)</button>
+    <button>🥾 Pular (2)</button>
+    <button>🪝 Agachar (3)</button>
+    <button>🖐️ Pegar (4)</button>
+    <button>🍴 Comer (5)</button>
+    <button>👕 Vestir (6)</button>
+  </div>
+  <script>
+    const config = {
+      type: Phaser.AUTO,
+      parent: 'game-container',
+      width: window.innerWidth,
+      height: window.innerHeight - document.querySelector('.top-bar').offsetHeight - document.querySelector('.bottom-section').offsetHeight - document.querySelector('.actions').offsetHeight,
+      physics: { default: 'arcade', arcade: { gravity: { y: 500 }, debug: false } },
+      scene: { preload, create, update }
+    };
+    const game = new Phaser.Game(config);
+
+    function preload() {
+      // Assets de teste
+    }
+
+    function create() {
+      const { width, height } = this.scale;
+      // Grid 200x200
+      const cellSize = 200;
+      const grid = this.add.graphics();
+      grid.lineStyle(2, 0x00ff00, 0.5);
+      for (let x = 0; x <= width; x += cellSize) {
+        grid.moveTo(x, 0);
+        grid.lineTo(x, height);
+      }
+      for (let y = 0; y <= height; y += cellSize) {
+        grid.moveTo(0, y);
+        grid.lineTo(width, y);
+      }
+      grid.strokePath();
+      // Sprite do jogador
+      const g = this.add.graphics();
+      g.fillStyle(0xff0000, 1);
+      g.fillRect(0, 0, 32, 48);
+      g.generateTexture('player', 32, 48);
+      g.destroy();
+      this.player = this.physics.add.sprite(width/2, height/2, 'player');
+      this.player.setCollideWorldBounds(true);
+      this.keys = this.input.keyboard.addKeys({ left: 'A', right: 'D', jump: 'SPACE' });
+      this.cameras.main.setBounds(0,0,width,height);
+      this.cameras.main.startFollow(this.player);
+      document.getElementById('zoom-in').addEventListener('click', ()=>this.cameras.main.zoom+=0.1);
+      document.getElementById('zoom-out').addEventListener('click', ()=>this.cameras.main.zoom=Math.max(0.5,this.cameras.main.zoom-0.1));
+    }
+
+    function update() {
+      const speed=200, onGround=this.player.body.blocked.down;
+      if(this.keys.left.isDown) this.player.setVelocityX(-speed);
+      else if(this.keys.right.isDown) this.player.setVelocityX(speed);
+      else this.player.setVelocityX(0);
+      if(Phaser.Input.Keyboard.JustDown(this.keys.jump)&&onGround) this.player.setVelocityY(-400);
+    }
+  </script>
+</body>
+</html>
