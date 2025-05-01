@@ -4,65 +4,100 @@
   <meta charset="UTF-8" />
   <title>Walltopia Client</title>
   <style>
-    canvas { background: #000; display: block; margin: auto; }
+    body { margin: 0; background: #000; color: #fff; display: flex; flex-direction: column; align-items: center; }
+    #game { border: 1px solid #555; background: #222; }
+    #status { margin: 8px; }
   </style>
 </head>
 <body>
+  <h1>Walltopia Client</h1>
+  <p id="status">Conectando...</p>
   <canvas id="game" width="800" height="400"></canvas>
 
   <!-- Socket.IO client -->
   <script src="https://cdn.socket.io/4.6.1/socket.io.min.js"></script>
   <script>
-    // --- Cole seu token JWT aqui: ---
-    const token = 'eyJhbGciOiJIUzI1NiIsInR5cCI6IkpXVCJ9.eyJ1c2VySWQiOiIxNzQ2MDY5Mjg1NzA5IiwiZW1haWwiOiJub3ZvWFlaQGV4ZW1wbG8uY29tIiwiaWF0IjoxNzQ2MDY5Mjk1LCJleHAiOjE3NDYwNzY0OTV9.cHfPMxr0iLMacteLy8jnvw1p7N4zIaOul1oF4b3xUKo';
+    // =============================
+    // Configuração do token e URL
+    // =============================
+    // Substitua com o seu token JWT obtido no /login
+    const token = 'SEU_TOKEN_JWT_AQUI';
+    // Substitua com a URL do seu servidor Replit (sem barra no final)
+    const SERVER_URL = 'https://0803cfd3-ab2a-4b96-bf35-eb788a29f988-00-2jhigdrm8gnnu.worf.replit.dev';
 
-    // Conecta enviando o token no handshake
-    const socket = io('https://0803cfd3-ab2a-4b96-bf35-eb788a29f988-00-2jhigdrm8gnnu.worf.replit.dev', {
+    // =============================
+    // Conexão Socket.IO autenticada
+    // =============================
+    const socket = io(SERVER_URL, {
       auth: { token }
     });
 
-    // Se der problema na autenticação, exibe alerta
     socket.on('connect_error', err => {
       alert('Erro de conexão: ' + err.message);
+      document.getElementById('status').textContent = 'Erro: ' + err.message;
     });
 
-    // No servidor, ao conectar, você verá no console: "Usuário autenticado: ..."
     socket.on('connect', () => {
-      console.log('Socket conectado, id:', socket.id);
+      console.log('Conectado ao servidor, socket id:', socket.id);
+      document.getElementById('status').textContent = 'Conectado como ' + socket.id;
     });
 
-    // Canvas 2D básico para representar o player
-    const canvas = document.getElementById('game');
-    const ctx = canvas.getContext('2d');
+    // =============================
+    // Estado do jogador e outros
+    // =============================
+    const otherPlayers = {};
     let x = 50, y = 350;
 
-    // Desenha seu avatar como um quadrado vermelho
-    function draw() {
-      ctx.clearRect(0, 0, canvas.width, canvas.height);
-      ctx.fillStyle = 'red';
-      ctx.fillRect(x, y - 20, 20, 20);
-    }
+    // =============================
+    // Recebendo eventos do servidor
+    // =============================
+    socket.on('playerMoved', ({ id, x: px, y: py }) => {
+      otherPlayers[id] = { x: px, y: py };
+    });
 
-    // Movimentação local
+    socket.on('playerDisconnected', id => {
+      delete otherPlayers[id];
+    });
+
+    // =============================
+    // Configuração do canvas
+    // =============================
+    const canvas = document.getElementById('game');
+    const ctx = canvas.getContext('2d');
+
+    // =============================
+    // Movimentação local e envio
+    // =============================
     document.addEventListener('keydown', e => {
-      if      (e.key === 'a') x -= 5;
-      else if (e.key === 'd') x += 5;
-      else if (e.key === 'w') y -= 5;
-      else if (e.key === 's') y += 5;
-      draw();
-      // Notifica o servidor
+      switch (e.key) {
+        case 'a': x -= 5; break;
+        case 'd': x += 5; break;
+        case 'w': y -= 5; break;
+        case 's': y += 5; break;
+      }
+      // Envia posição ao servidor
       socket.emit('move', { x, y });
     });
 
-    // Recebe movimentos de outros jogadores
-    socket.on('playerMoved', ({ id, x, y }) => {
-      // Aqui poderíamos armazenar e desenhar outros avatars
-      console.log(`Jogador ${id} moveu para`, x, y);
-    });
+    // =============================
+    // Desenho no canvas (30 FPS)
+    // =============================
+    function draw() {
+      ctx.clearRect(0, 0, canvas.width, canvas.height);
 
-    // Inicia o draw
-    draw();
+      // Desenha jogador local (vermelho)
+      ctx.fillStyle = 'red';
+      ctx.fillRect(x, y - 20, 20, 20);
+
+      // Desenha outros jogadores (verde)
+      ctx.fillStyle = 'green';
+      for (const id in otherPlayers) {
+        const p = otherPlayers[id];
+        ctx.fillRect(p.x, p.y - 20, 20, 20);
+      }
+    }
+
+    setInterval(draw, 1000 / 30);
   </script>
 </body>
 </html>
-
