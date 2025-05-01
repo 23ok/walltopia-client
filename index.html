@@ -1,171 +1,68 @@
 <!DOCTYPE html>
 <html lang="pt-BR">
 <head>
-  <meta charset="UTF-8">
-  <title>Walltopia - Multiplayer</title>
+  <meta charset="UTF-8" />
+  <title>Walltopia Client</title>
   <style>
-    body { margin: 0; font-family: sans-serif; height: 100vh; display: flex; flex-direction: column; }
-    .top-bar { display: flex; align-items: center; justify-content: space-between; background: #333; color: #fff; padding: 8px; }
-    .middle { flex: 1; position: relative; background: #000; }
-    #game-container { width: 100%; height: 100%; }
-    .bottom-section { display: flex; }
-    .chat { flex: 1; background: #222; color: #fff; padding: 8px; min-height: 150px; overflow-y: auto; }
-    .inventory { width: 200px; background: #444; color: #fff; padding: 8px; }
-    .inventory-grid { display: grid; grid-template-columns: repeat(3, 1fr); gap: 4px; margin-top: 8px; }
-    .slot { width: 40px; height: 40px; border: 1px solid #fff; }
-    .actions { background: #555; color: #fff; padding: 8px; display: flex; justify-content: space-around; }
-    button { background: #666; border: none; color: #fff; padding: 6px 12px; cursor: pointer; }
-    button:hover { background: #777; }
+    canvas { background: #000; display: block; margin: auto; }
   </style>
-  <!-- Biblioteca Socket.IO cliente -->
-  <script src="https://cdn.socket.io/4.6.1/socket.io.min.js"></script>
-  <!-- Biblioteca Phaser 3 -->
-  <script src="https://cdn.jsdelivr.net/npm/phaser@3/dist/phaser.min.js"></script>
 </head>
 <body>
-  <div class="top-bar">
-    <div>Walltopia</div>
-    <div>Level: 1 | XP: 0/100</div>
-    <div>Zoom: <button id="zoom-out">-</button> <button id="zoom-in">+</button></div>
-  </div>
-  <div class="middle">
-    <div id="game-container"></div>
-  </div>
-  <div class="bottom-section">
-    <div class="chat">
-      <p>Sistema de chat inicializado...</p>
-    </div>
-    <div class="inventory">
-      <div>Inventário (3×3)</div>
-      <div class="inventory-grid">
-        <div class="slot"></div><div class="slot"></div><div class="slot"></div>
-        <div class="slot"></div><div class="slot"></div><div class="slot"></div>
-        <div class="slot"></div><div class="slot"></div><div class="slot"></div>
-      </div>
-      <div style="margin-top: 12px;">Vestir: [slot roupa]</div>
-    </div>
-  </div>
-  <div class="actions">
-    <button>⚔️ Bater (1)</button>
-    <button>🥾 Pular (2)</button>
-    <button>🪝 Agachar (3)</button>
-    <button>🖐️ Pegar (4)</button>
-    <button>🍴 Comer (5)</button>
-    <button>👕 Vestir (6)</button>
-  </div>
+  <canvas id="game" width="800" height="400"></canvas>
 
+  <!-- Socket.IO client -->
+  <script src="https://cdn.socket.io/4.6.1/socket.io.min.js"></script>
   <script>
-    // ----------------------------------------
-    // 1) Conecta ao servidor WebSocket (substitua a URL)
-    // ----------------------------------------
-    const socket = io('https://0803cfd3-ab2a-4b96-bf35-eb788a29f988-00-2jhigdrm8gnnu.worf.replit.dev'); 
-    const otherPlayers = {}; // guarda sprites dos outros jogadores
+    // --- Cole seu token JWT aqui: ---
+    const token = 'eyJhbGciOiJIUzI1NiIsInR5cCI6IkpXVCJ9.eyJ1c2VySWQiOiIxNzQ2MDY5Mjg1NzA5IiwiZW1haWwiOiJub3ZvWFlaQGV4ZW1wbG8uY29tIiwiaWF0IjoxNzQ2MDY5Mjk1LCJleHAiOjE3NDYwNzY0OTV9.cHfPMxr0iLMacteLy8jnvw1p7N4zIaOul1oF4b3xUKo';
 
+    // Conecta enviando o token no handshake
+    const socket = io('https://0803cfd3-ab2a-4b96-bf35-eb788a29f988-00-2jhigdrm8gnnu.worf.replit.dev', {
+      auth: { token }
+    });
+
+    // Se der problema na autenticação, exibe alerta
+    socket.on('connect_error', err => {
+      alert('Erro de conexão: ' + err.message);
+    });
+
+    // No servidor, ao conectar, você verá no console: "Usuário autenticado: ..."
     socket.on('connect', () => {
-      console.log('Conectado ao servidor com id', socket.id);
+      console.log('Socket conectado, id:', socket.id);
     });
 
-    socket.on('playerMoved', data => {
-      const scene = game.scene.scenes[0];
-      if (!otherPlayers[data.id]) {
-        // cria um retângulo verde para esse outro jogador
-        otherPlayers[data.id] = scene.add.rectangle(data.x, data.y, 32, 48, 0x00ff00);
-      } else {
-        otherPlayers[data.id].x = data.x;
-        otherPlayers[data.id].y = data.y;
-      }
+    // Canvas 2D básico para representar o player
+    const canvas = document.getElementById('game');
+    const ctx = canvas.getContext('2d');
+    let x = 50, y = 350;
+
+    // Desenha seu avatar como um quadrado vermelho
+    function draw() {
+      ctx.clearRect(0, 0, canvas.width, canvas.height);
+      ctx.fillStyle = 'red';
+      ctx.fillRect(x, y - 20, 20, 20);
+    }
+
+    // Movimentação local
+    document.addEventListener('keydown', e => {
+      if      (e.key === 'a') x -= 5;
+      else if (e.key === 'd') x += 5;
+      else if (e.key === 'w') y -= 5;
+      else if (e.key === 's') y += 5;
+      draw();
+      // Notifica o servidor
+      socket.emit('move', { x, y });
     });
 
-    socket.on('playerDisconnected', id => {
-      if (otherPlayers[id]) {
-        otherPlayers[id].destroy();
-        delete otherPlayers[id];
-      }
+    // Recebe movimentos de outros jogadores
+    socket.on('playerMoved', ({ id, x, y }) => {
+      // Aqui poderíamos armazenar e desenhar outros avatars
+      console.log(`Jogador ${id} moveu para`, x, y);
     });
 
-    // ----------------------------------------
-    // 2) Configuração do Phaser
-    // ----------------------------------------
-    const config = {
-      type: Phaser.AUTO,
-      parent: 'game-container',
-      width: window.innerWidth,
-      height: window.innerHeight 
-              - document.querySelector('.top-bar').offsetHeight
-              - document.querySelector('.bottom-section').offsetHeight
-              - document.querySelector('.actions').offsetHeight,
-      physics: { default: 'arcade', arcade: { gravity: { y: 500 }, debug: false } },
-      scene: { preload, create, update }
-    };
-    const game = new Phaser.Game(config);
-
-    function preload() {
-      // Sem assets externos
-    }
-
-    function create() {
-      const { width, height } = this.scale;
-
-      // Grid de células 200×200
-      const cellSize = 200;
-      const grid = this.add.graphics();
-      grid.lineStyle(2, 0x00ff00, 0.5);
-      for (let x = 0; x <= width; x += cellSize) {
-        grid.moveTo(x, 0); grid.lineTo(x, height);
-      }
-      for (let y = 0; y <= height; y += cellSize) {
-        grid.moveTo(0, y); grid.lineTo(width, y);
-      }
-      grid.strokePath();
-
-      // Textura simples para o jogador (retângulo vermelho)
-      const g = this.add.graphics();
-      g.fillStyle(0xff0000, 1);
-      g.fillRect(0, 0, 32, 48);
-      g.generateTexture('player', 32, 48);
-      g.destroy();
-
-      // Cria o sprite do jogador
-      this.player = this.physics.add.sprite(width/2, height/2, 'player');
-      this.player.setCollideWorldBounds(true);
-
-      // Controles
-      this.keys = this.input.keyboard.addKeys({ left: 'A', right: 'D', jump: 'SPACE' });
-
-      // Câmera
-      this.cameras.main.setBounds(0, 0, width, height);
-      this.cameras.main.startFollow(this.player);
-
-      // Zoom via botões
-      document.getElementById('zoom-in').addEventListener('click', () => {
-        this.cameras.main.zoom += 0.1;
-      });
-      document.getElementById('zoom-out').addEventListener('click', () => {
-        this.cameras.main.zoom = Math.max(0.5, this.cameras.main.zoom - 0.1);
-      });
-    }
-
-    function update() {
-      const speed = 200;
-      const onGround = this.player.body.blocked.down;
-
-      // Movimento horizontal
-      if (this.keys.left.isDown) {
-        this.player.setVelocityX(-speed);
-      } else if (this.keys.right.isDown) {
-        this.player.setVelocityX(speed);
-      } else {
-        this.player.setVelocityX(0);
-      }
-
-      // Pulo
-      if (Phaser.Input.Keyboard.JustDown(this.keys.jump) && onGround) {
-        this.player.setVelocityY(-400);
-      }
-
-      // Emite posição ao servidor
-      socket.emit('move', { x: this.player.x, y: this.player.y });
-    }
+    // Inicia o draw
+    draw();
   </script>
 </body>
 </html>
+
