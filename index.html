@@ -12,134 +12,101 @@
 <body>
   <h1>Walltopia Client</h1>
   <p id="status">Conectando...</p>
-  <!-- Canvas maior para aproveitar tela de desktop -->
   <canvas id="game" width="1800" height="600"></canvas>
 
-  <!-- Socket.IO client -->
   <script src="https://cdn.socket.io/4.6.1/socket.io.min.js"></script>
   <script>
-    // =============================
-    // Configurações iniciais
-    // =============================
-    const token = 'eyJhbGciOiJIUzI1NiIsInR5cCI6IkpXVCJ9.eyJ1c2VySWQiOiIxNzQ2MDgwOTEzOTA2IiwiZW1haWwiOiJub3ZvdXN1YXJpb0BleGVtcGxvLmNvbSIsImlhdCI6MTc0NjA4MDkyOCwiZXhwIjoxNzQ2MDg4MTI4fQ.0mNKFr7_dQB5x8-3AReJ8OB14gOGgY2FDMnloPTEBN4';    // substitua pelo token recebido
+    const token = 'eyJhbGciOiJIUzI1NiIsInR5cCI6IkpXVCJ9.eyJ1c2VySWQiOiIxNzQ2MDgwOTEzOTA2IiwiZW1haWwiOiJub3ZvdXN1YXJpb0BleGVtcGxvLmNvbSIsImlhdCI6MTc0NjA4MDkyOCwiZXhwIjoxNzQ2MDg4MTI4fQ.0mNKFr7_dQB5x8-3AReJ8OB14gOGgY2FDMnloPTEBN4';
     const SERVER_URL = 'https://0803cfd3-ab2a-4b96-bf35-eb788a29f988-00-2jhigdrm8gnnu.worf.replit.dev';
 
-    // grade de ambientes
-    const cols = 4;
-    const rows = 3;
-
-    // =============================
-    // Canvas e contexto
-    // =============================
+    const cols = 4, rows = 3;
     const canvas = document.getElementById('game');
     const ctx = canvas.getContext('2d');
     const cellWidth = canvas.width / cols;
     const cellHeight = canvas.height / rows;
 
-    // =============================
-    // Estado de zoom e câmera
-    // =============================
-    let zoomLevel = 1; // 1: visão geral, 2: visão da célula
+    let zoomLevel = 1;
     let camX = 0, camY = 0;
 
-    // alternar zoom com teclas 1 e 2
+    // Física
+    let x = cellWidth/2, y = canvas.height - 20;
+    let vx = 0, vy = 0;
+    const speed = 5;
+    const gravity = 0.5;
+    const jumpStrength = 12;
+    let onGround = false;
+
     document.addEventListener('keydown', e => {
-      if (e.key === '1') zoomLevel = 1;
-      if (e.key === '2') zoomLevel = 2;
+      switch(e.key) {
+        case 'a': vx = -speed; break;
+        case 'd': vx = speed; break;
+        case ' ': if(onGround) vy = -jumpStrength; break;
+        case '1': zoomLevel = 1; break;
+        case '2': zoomLevel = 2; break;
+      }
+    });
+    document.addEventListener('keyup', e => {
+      if(e.key==='a' || e.key==='d') vx = 0;
     });
 
-    // =============================
-    // Conexão Socket.IO autenticada
-    // =============================
-    const socket = io(SERVER_URL, { auth: { token } });
+    const socket = io(SERVER_URL, { auth:{ token }});
     const statusEl = document.getElementById('status');
-
-    socket.on('connect_error', err => {
-      statusEl.textContent = 'Erro: ' + err.message;
-    });
-
-    socket.on('connect', () => {
-      statusEl.textContent = 'Conectado como ' + socket.id;
-    });
-
-    // =============================
-    // Jogadores
-    // =============================
     const otherPlayers = {};
-    let x = cellWidth / 2, y = canvas.height - (cellHeight/6);
 
-    socket.on('playerMoved', ({ id, x: px, y: py }) => {
-      otherPlayers[id] = { x: px, y: py };
-    });
+    socket.on('connect_error', err => statusEl.textContent = 'Erro: '+err.message);
+    socket.on('connect', () => statusEl.textContent = 'Conectado como '+socket.id);
+    socket.on('playerMoved', ({id, x:px, y:py}) => otherPlayers[id]={x:px,y:py});
     socket.on('playerDisconnected', id => delete otherPlayers[id]);
 
-    // =============================
-    // Movimentação local
-    // =============================
-    document.addEventListener('keydown', e => {
-      switch (e.key) {
-        case 'a': x -= 5; break;
-        case 'd': x += 5; break;
-        case 'w': y -= 5; break;
-        case 's': y += 5; break;
-      }
-      socket.emit('move', { x, y });
-    });
+    // Atualiza física e envia posição
+    function update() {
+      vy += gravity;
+      x += vx;
+      y += vy;
+      // colisão chão/teto
+      if(y >= canvas.height-10) { y = canvas.height-10; vy = 0; onGround=true; }
+      else onGround=false;
+      if(y < 10) { y=10; vy=0; }
+      // colisão paredes
+      if(x < 10) x=10;
+      if(x > canvas.width-10) x = canvas.width-10;
+      socket.emit('move',{x,y});
+    }
 
-    // =============================
-    // Desenho com câmera e zoom
-    // =============================
     function draw() {
-      // atualiza câmera para zoom 2
-      if (zoomLevel === 2) {
-        const col = Math.floor(x / cellWidth);
-        const row = Math.floor(y / cellHeight);
-        const targetX = col * cellWidth;
-        const targetY = row * cellHeight;
-        camX += (targetX - camX) * 0.1;
-        camY += (targetY - camY) * 0.1;
+      if(zoomLevel===2) {
+        const col = Math.floor(x/cellWidth);
+        const row = Math.floor(y/cellHeight);
+        const targetX = col*cellWidth;
+        const targetY = row*cellHeight;
+        camX += (targetX-camX)*0.1;
+        camY += (targetY-camY)*0.1;
       }
-
-      // limpa e aplica transformações
       ctx.save();
-      if (zoomLevel === 1) {
-        ctx.setTransform(1,0,0,1,0,0);
-      } else {
-        const scaleX = canvas.width / cellWidth;
-        const scaleY = canvas.height / cellHeight;
-        ctx.setTransform(scaleX, 0, 0, scaleY, -camX * scaleX, -camY * scaleY);
+      if(zoomLevel===1) ctx.setTransform(1,0,0,1,0,0);
+      else {
+        const sx = canvas.width/cellWidth;
+        const sy = canvas.height/cellHeight;
+        ctx.setTransform(sx,0,0,sy,-camX*sx,-camY*sy);
       }
-      ctx.clearRect(0, 0, canvas.width, canvas.height);
-
-      // desenha grid
-      ctx.strokeStyle = 'green';
-      for (let i = 0; i <= cols; i++) {
-        ctx.beginPath();
-        ctx.moveTo(i * cellWidth, 0);
-        ctx.lineTo(i * cellWidth, rows * cellHeight);
-        ctx.stroke();
+      ctx.clearRect(0,0,canvas.width,canvas.height);
+      ctx.strokeStyle='green';
+      for(let i=0;i<=cols;i++){
+        ctx.beginPath(); ctx.moveTo(i*cellWidth,0); ctx.lineTo(i*cellWidth,rows*cellHeight); ctx.stroke();
       }
-      for (let j = 0; j <= rows; j++) {
-        ctx.beginPath();
-        ctx.moveTo(0, j * cellHeight);
-        ctx.lineTo(cols * cellWidth, j * cellHeight);
-        ctx.stroke();
+      for(let j=0;j<=rows;j++){
+        ctx.beginPath(); ctx.moveTo(0,j*cellHeight); ctx.lineTo(cols*cellWidth,j*cellHeight); ctx.stroke();
       }
-
-      // desenha jogadores
-      // local (vermelho)
-      ctx.fillStyle = 'red';
-      ctx.fillRect(x - 10, y - 10, 20, 20);
-      // outros (verde)
-      ctx.fillStyle = 'green';
-      for (const id in otherPlayers) {
-        const p = otherPlayers[id];
-        ctx.fillRect(p.x - 10, p.y - 10, 20, 20);
+      // jogadores
+      ctx.fillStyle='red'; ctx.fillRect(x-10,y-10,20,20);
+      ctx.fillStyle='green';
+      for(const id in otherPlayers){
+        const p=otherPlayers[id]; ctx.fillRect(p.x-10,p.y-10,20,20);
       }
       ctx.restore();
     }
 
-    setInterval(draw, 1000 / 30);
+    setInterval(()=>{ update(); draw(); },1000/30);
   </script>
 </body>
 </html>
