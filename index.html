@@ -12,7 +12,7 @@
 <body>
   <h1>Walltopia Client</h1>
   <p id="status">Conectando...</p>
-  <canvas id="game" width="1600" height="600"></canvas>
+  <canvas id="game" width="1800" height="600"></canvas>
 
   <script src="https://cdn.socket.io/4.6.1/socket.io.min.js"></script>
   <script>
@@ -28,11 +28,19 @@
     let zoomLevel = 1;
     let camX = 0, camY = 0;
 
+    // Definição de gravidade por sala (linhas × colunas)
+    //  1 = normal, -1 = invertida, outros valores = múltiplos da gravidade base
+    const gravityMap = [
+      [1, 1, 1, 1],
+      [1, -1, 1, 1],  // sala invertida neste segundo andar
+      [1, 1, 1, -1]
+    ];
+
     // Física
     let x = cellWidth/2, y = canvas.height - 20;
     let vx = 0, vy = 0;
     const speed = 5;
-    const gravity = 0.5;
+    const baseGravity = 0.5;
     const jumpStrength = 12;
     let onGround = false;
 
@@ -58,9 +66,19 @@
     socket.on('playerMoved', ({id, x:px, y:py}) => otherPlayers[id]={x:px,y:py});
     socket.on('playerDisconnected', id => delete otherPlayers[id]);
 
+    function getCurrentGravity() {
+      const col = Math.floor(x / cellWidth);
+      const row = Math.floor(y / cellHeight);
+      if(row>=0 && row<rows && col>=0 && col<cols) {
+        return baseGravity * gravityMap[row][col];
+      }
+      return baseGravity;
+    }
+
     // Atualiza física e envia posição
     function update() {
-      vy += gravity;
+      // aplica gravidade da sala atual
+      vy += getCurrentGravity();
       x += vx;
       y += vy;
       // colisão chão/teto
