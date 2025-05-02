@@ -4,28 +4,83 @@
   <meta charset="UTF-8" />
   <title>Walltopia Client</title>
   <style>
-    body { margin: 0; background: #000; color: #fff; display: flex; flex-direction: column; align-items: center; }
-    #auth { margin: 16px; }
-    #auth input { margin: 4px; padding: 6px; }
-    #game-container { position: relative; }
-    #game { border: 1px solid #555; background: #222; }
-    #status { margin: 8px; }
+    body {
+      margin: 0;
+      background: #000;
+      color: #fff;
+      display: flex;
+      flex-direction: column;
+      align-items: center;
+      font-family: sans-serif;
+    }
+    header {
+      display: flex;
+      flex-wrap: wrap;
+      align-items: center;
+      justify-content: center;
+      padding: 8px;
+      background: #111;
+      width: 100%;
+    }
+    header h1 {
+      margin: 4px 16px;
+      font-size: 1.5em;
+    }
+    #auth {
+      display: flex;
+      flex-wrap: wrap;
+      align-items: center;
+      gap: 8px;
+    }
+    #auth input {
+      padding: 4px 8px;
+      font-size: 0.9em;
+      width: 150px;
+    }
+    #auth button {
+      padding: 4px 10px;
+      font-size: 0.9em;
+    }
+    #auth-status {
+      width: 100%;
+      text-align: center;
+      margin-top: 4px;
+      color: #f66;
+      font-size: 0.9em;
+    }
+    #status {
+      margin: 4px;
+      font-size: 0.9em;
+    }
+    #game-container {
+      flex: 1;
+      display: none;
+      width: 100%;
+      overflow: auto;
+    }
+    #game {
+      display: block;
+      margin: auto;
+      border: 1px solid #555;
+      background: #222;
+    }
   </style>
 </head>
 <body>
-  <div id="auth">
-    <h2>Login / Registro</h2>
-    <input id="email" type="email" placeholder="E-mail" />
-    <input id="password" type="password" placeholder="Senha" />
-    <input id="characterName" type="text" placeholder="Nome do Personagem" />
-    <button id="btn-register">Registrar</button>
-    <button id="btn-login">Entrar</button>
-    <div id="auth-status"></div>
-  </div>
-
-  <h1>Walltopia Client</h1>
+  <header>
+    <div id="auth">
+      <h2 style="margin:0; font-size:1.1em; color:#ccc;">Login / Registro</h2>
+      <input id="email" type="email" placeholder="E-mail" />
+      <input id="password" type="password" placeholder="Senha" />
+      <input id="characterName" type="text" placeholder="Nome do Personagem" />
+      <button id="btn-register">Registrar</button>
+      <button id="btn-login">Entrar</button>
+      <div id="auth-status"></div>
+    </div>
+    <h1>Walltopia</h1>
+  </header>
   <p id="status">Aguardando autenticação...</p>
-  <div id="game-container" style="display:none;">
+  <div id="game-container">
     <canvas id="game" width="1800" height="600"></canvas>
   </div>
 
@@ -34,29 +89,45 @@
     const SERVER_URL = 'https://0803cfd3-ab2a-4b96-bf35-eb788a29f988-00-2jhigdrm8gnnu.worf.replit.dev';
     let socket, token;
 
+    // elementos de UI
+    const emailInput = document.getElementById('email');
+    const passwordInput = document.getElementById('password');
+    const nameInput = document.getElementById('characterName');
     const authStatus = document.getElementById('auth-status');
+    const statusEl = document.getElementById('status');
+    const gameContainer = document.getElementById('game-container');
+
     document.getElementById('btn-register').onclick = async () => {
       const email = emailInput.value.trim();
       const password = passwordInput.value;
-      const name = characterName.value.trim();
-      if (!email || !password || !name) return authStatus.textContent = 'Preencha todos os campos.';
-      const res = await fetch(SERVER_URL + '/register', {
-        method: 'POST', headers: {'Content-Type':'application/json'},
-        body: JSON.stringify({email, password, characterName:name})
+      const name = nameInput.value.trim();
+      if (!email || !password || !name) {
+        return authStatus.textContent = 'Preencha todos os campos.';
+      }
+      const res = await fetch(`${SERVER_URL}/register`, {
+        method: 'POST',
+        headers: {'Content-Type':'application/json'},
+        body: JSON.stringify({ email, password, characterName: name })
       });
       const data = await res.json();
       authStatus.textContent = data.error || data.message;
     };
+
     document.getElementById('btn-login').onclick = async () => {
       const email = emailInput.value.trim();
       const password = passwordInput.value;
-      if (!email || !password) return authStatus.textContent = 'E-mail e senha são obrigatórios.';
-      const res = await fetch(SERVER_URL + '/login', {
-        method: 'POST', headers: {'Content-Type':'application/json'},
-        body: JSON.stringify({email, password})
+      if (!email || !password) {
+        return authStatus.textContent = 'E-mail e senha são obrigatórios.';
+      }
+      const res = await fetch(`${SERVER_URL}/login`, {
+        method: 'POST',
+        headers: {'Content-Type':'application/json'},
+        body: JSON.stringify({ email, password })
       });
       const data = await res.json();
-      if (data.error) return authStatus.textContent = data.error;
+      if (data.error) {
+        return authStatus.textContent = data.error;
+      }
       token = data.token;
       authStatus.textContent = 'Autenticado!';
       startGame();
@@ -64,38 +135,79 @@
 
     function startGame() {
       document.getElementById('auth').style.display = 'none';
-      document.getElementById('game-container').style.display = 'block';
+      statusEl.textContent = '';
+      gameContainer.style.display = 'block';
       initSocket();
       initGameLoop();
     }
 
     function initSocket() {
-      socket = io(SERVER_URL, { auth:{ token } });
-      socket.on('connect_error', err => statusEl.textContent = 'Erro: '+err.message);
-      socket.on('connect', () => statusEl.textContent = 'Conectado como '+socket.id);
-      socket.on('playerMoved', ({id, x:px, y:py}) => otherPlayers[id]={x:px,y:py});
+      socket = io(SERVER_URL, { auth: { token } });
+      socket.on('connect_error', err => statusEl.textContent = 'Erro: ' + err.message);
+      socket.on('connect', () => statusEl.textContent = 'Conectado como ' + socket.userId);
+      socket.on('playerMoved', ({ id, x, y }) => otherPlayers[id] = { x, y });
       socket.on('playerDisconnected', id => delete otherPlayers[id]);
     }
 
-    // resto do código (física, desenho, etc.) permanece igual
+    // lógico do jogo permanece
     const cols = 4, rows = 3;
     const canvas = document.getElementById('game');
     const ctx = canvas.getContext('2d');
-    const cellWidth = canvas.width / cols;
-    const cellHeight = canvas.height / rows;
+    const cellW = canvas.width / cols;
+    const cellH = canvas.height / rows;
     let zoomLevel = 1, camX = 0, camY = 0;
-    const gravityMap = [ [1,1,1,1],[1,-1,1,1],[1,1,1,-1] ];
-    let x = cellWidth/2, y = canvas.height - 20, vx=0, vy=0, onGround=false;
-    const speed=5, baseGravity=0.5, jumpStrength=12;
+    const gravityMap = [[1,1,1,1],[1,-1,1,1],[1,1,1,-1]];
+    let x = cellW/2, y = canvas.height - 20, vx=0, vy=0, onGround=false;
+    const speed=5, baseG=0.5, jump=12;
     const otherPlayers = {};
-    const statusEl = document.getElementById('status');
-    document.addEventListener('keydown', e=>{ if(e.key==='a') vx=-speed; if(e.key==='d') vx=speed; if(e.key===' '&&onGround) vy=-jumpStrength; if(e.key==='1') zoomLevel=1; if(e.key==='2') zoomLevel=2; });
-    document.addEventListener('keyup', e=>{ if(e.key==='a'||e.key==='d') vx=0; });
 
-    function getCurrentGravity(){ const col=Math.floor(x/cellWidth), row=Math.floor(y/cellHeight); if(row>=0&&row<rows&&col>=0&&col<cols) return baseGravity*gravityMap[row][col]; return baseGravity; }
-    function update(){ vy+=getCurrentGravity(); x+=vx; y+=vy; if(y>=canvas.height-20){ y=canvas.height-20; vy=0; onGround=true;} else onGround=false; if(y<20){ y=20; vy=0;} if(x<20)x=20; if(x>canvas.width-20)x=canvas.width-20; socket.emit('move',{x,y}); }
-    function draw(){ if(zoomLevel===2){ const col=Math.floor(x/cellWidth), row=Math.floor(y/cellHeight); const targetX=col*cellWidth, targetY=row*cellHeight; camX+=(targetX-camX)*0.1; camY+=(targetY-camY)*0.1;} ctx.save(); if(zoomLevel===1) ctx.setTransform(1,0,0,1,0,0); else { const sx=canvas.width/cellWidth, sy=canvas.height/cellHeight; ctx.setTransform(sx,0,0,sy,-camX*sx,-camY*sy);} ctx.clearRect(0,0,canvas.width,canvas.height); ctx.strokeStyle='green'; for(let i=0;i<=cols;i++){ ctx.beginPath(); ctx.moveTo(i*cellWidth,0); ctx.lineTo(i*cellWidth,rows*cellHeight); ctx.stroke(); } for(let j=0;j<=rows;j++){ ctx.beginPath(); ctx.moveTo(0,j*cellHeight); ctx.lineTo(cols*cellWidth,j*cellHeight); ctx.stroke(); } ctx.fillStyle='red'; ctx.fillRect(x-10,y-10,20,20); ctx.fillStyle='green'; for(const id in otherPlayers){ const p=otherPlayers[id]; ctx.fillRect(p.x-10,p.y-10,20,20);} ctx.restore(); }
-    function initGameLoop(){ setInterval(()=>{ update(); draw(); },1000/30);}  
+    document.addEventListener('keydown', e => {
+      if (e.key==='a') vx=-speed;
+      if (e.key==='d') vx=speed;
+      if (e.key===' ' && onGround) vy=-jump;
+      if (e.key==='1') zoomLevel=1;
+      if (e.key==='2') zoomLevel=2;
+    });
+    document.addEventListener('keyup', e => {
+      if (e.key==='a'||e.key==='d') vx=0;
+    });
+
+    function getG(){ const c=Math.floor(x/cellW), r=Math.floor(y/cellH);
+      if(r>=0&&r<rows&&c>=0&&c<cols) return baseG * gravityMap[r][c];
+      return baseG;
+    }
+    function update(){
+      vy += getG(); x += vx; y += vy;
+      if (y >= canvas.height-20) { y = canvas.height-20; vy = 0; onGround = true; }
+      else onGround = false;
+      if (y < 20) { y = 20; vy = 0; }
+      if (x < 20) x = 20;
+      if (x > canvas.width-20) x = canvas.width-20;
+      socket.emit('move',{ x, y });
+    }
+    function draw(){
+      ctx.save();
+      if (zoomLevel===2) {
+        const c=Math.floor(x/cellW), r=Math.floor(y/cellH);
+        const tX=c*cellW, tY=r*cellH;
+        camX += (tX-camX)*0.1;
+        camY += (tY-camY)*0.1;
+        const sx=canvas.width/cellW, sy=canvas.height/cellH;
+        ctx.setTransform(sx,0,0,sy,-camX*sx,-camY*sy);
+      } else {
+        ctx.setTransform(1,0,0,1,0,0);
+      }
+      ctx.clearRect(0,0,canvas.width,canvas.height);
+      ctx.strokeStyle='green';
+      for(let i=0;i<=cols;i++){ ctx.beginPath(); ctx.moveTo(i*cellW,0); ctx.lineTo(i*cellW,rows*cellH); ctx.stroke(); }
+      for(let j=0;j<=rows;j++){ ctx.beginPath(); ctx.moveTo(0,j*cellH); ctx.lineTo(cols*cellW,j*cellH); ctx.stroke(); }
+      ctx.fillStyle='red'; ctx.fillRect(x-10,y-10,20,20);
+      ctx.fillStyle='green';
+      for(let id in otherPlayers){ const p=otherPlayers[id]; ctx.fillRect(p.x-10,p.y-10,20,20); }
+      ctx.restore();
+    }
+    function initGameLoop(){ setInterval(()=>{ update(); draw(); },1000/30); }
   </script>
 </body>
 </html>
+
