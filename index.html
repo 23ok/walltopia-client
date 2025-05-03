@@ -66,7 +66,20 @@
     };
 
     // === Network & Socket.IO Module ===
-    function initSocket() {
+    function function initSocket() {
+      // Conecta sem exigir token para possibilitar espectadores
+      socket = io(SERVER_URL);
+      // Autenticação só influencia envio de movimentos, não a conexão
+      socket.on('connect_error', err => {
+        console.warn('Conexão falhou (espectador):', err.message);
+        statusEl.textContent = 'Conectado como espectador';
+      });
+      socket.on('connect', () => {
+        selfId = socket.id;
+        statusEl.textContent = token ? 'Conectado como jogador' : 'Conectado como espectador';
+      });
+      socket.on('playerMoved', msg => { players[msg.id] = msg; });
+      socket.on('playerDisconnected', id => { delete players[id]; });
       const opts = token ? { auth: { token } } : {};
       socket = io(SERVER_URL, opts);
       socket.on('connect_error', err => statusEl.textContent = 'Erro: ' + err.message);
@@ -151,4 +164,3 @@
   </script>
 </body>
 </html>
-
