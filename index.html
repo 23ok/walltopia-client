@@ -4,15 +4,16 @@
   <meta charset="UTF-8">
   <title>Walltopia Client</title>
   <style>
-    body{margin:0;background:#000;color:#fff;font-family:sans-serif;display:flex;flex-direction:column;height:100vh;}
-    header{display:flex;align-items:center;justify-content:space-between;padding:4px 16px;background:#111;}
-    header h1{margin:0;font-size:1.2em;}
-    #auth{display:flex;align-items:center;}
-    #auth input,#auth button{padding:4px 6px;font-size:0.9em;margin-right:4px;background:#222;border:1px solid #444;color:#fff;}
-    #auth-status{font-size:0.8em;color:#f66;margin-left:8px;}
-    #status{text-align:center;font-size:0.9em;margin:8px 0;}
-    #game-container{flex:1;display:block;position:relative;}
-    canvas#game{display:block;margin:auto;background:#222;border:1px solid #555;}
+    /* Layout básico */
+    body { margin: 0; background: #000; color: #fff; font-family: sans-serif; display: flex; flex-direction: column; height: 100vh; }
+    header { display: flex; align-items: center; justify-content: space-between; padding: 4px 16px; background: #111; }
+    header h1 { margin: 0; font-size: 1.2em; }
+    #auth { display: flex; align-items: center; }
+    #auth input, #auth button { padding: 4px 6px; font-size: 0.9em; margin-right: 4px; background: #222; border: 1px solid #444; color: #fff; }
+    #auth-status { font-size: 0.8em; color: #f66; margin-left: 8px; }
+    #status { text-align: center; font-size: 0.9em; margin: 8px 0; }
+    #game-container { flex: 1; display: block; position: relative; }
+    canvas#game { display: block; margin: auto; background: #222; border: 1px solid #555; }
   </style>
 </head>
 <body>
@@ -27,6 +28,7 @@
       <div id="auth-status"></div>
     </div>
   </header>
+
   <div id="status">Conectando como espectador...</div>
   <div id="game-container">
     <canvas id="game" width="1800" height="600"></canvas>
@@ -34,65 +36,138 @@
 
   <script src="https://cdn.socket.io/4.6.1/socket.io.min.js"></script>
   <script>
+    // === [1,51] Initialization & Configuration ===
     const SERVER_URL = 'https://0803cfd3-ab2a-4b96-bf35-eb788a29f988-00-2jhigdrm8gnnu.worf.replit.dev';
     let socket, token;
     const players = {};
-    let selfId, pos = { x:150, y:500 }, vel = { x:0, y:0 };
-    const gravity = 0.5, jumpPower = -12;
-    const cellW=300, cellH=200;
-    const canvas = document.getElementById('game'), ctx = canvas.getContext('2d');
-    const emailI=document.getElementById('email'), passI=document.getElementById('password'), nameI=document.getElementById('characterName');
-    const authS=document.getElementById('auth-status'), statusEl=document.getElementById('status'), authDiv=document.getElementById('auth');
+    let selfId;
+    
+    // === [1,6,7] Authentication Module ===
+    const emailInput      = document.getElementById('email');
+    const passwordInput   = document.getElementById('password');
+    const nameInput       = document.getElementById('characterName');
+    const authStatus      = document.getElementById('auth-status');
+    const statusEl        = document.getElementById('status');
+    const authDiv         = document.getElementById('auth');
 
-    initSocket(); requestAnimationFrame(gameLoop);
-
-    document.getElementById('btn-register').onclick=async()=>{
-      const e=emailI.value.trim(), p=passI.value, n=nameI.value.trim();
-      if(!e||!p||!n) return authS.textContent='Preencha todos os campos';
-      const res=await fetch(`${SERVER_URL}/register`,{method:'POST',headers:{'Content-Type':'application/json'},body:JSON.stringify({email:e,password:p,characterName:n})});
-      const d=await res.json(); authS.textContent=d.error||d.message;
+    document.getElementById('btn-register').onclick = async () => {
+      const email = emailInput.value.trim();
+      const password = passwordInput.value;
+      const name = nameInput.value.trim();
+      if (!email || !password || !name) {
+        authStatus.textContent = 'Preencha todos os campos';
+        return;
+      }
+      const res = await fetch(`${SERVER_URL}/register`, {
+        method: 'POST', headers: {'Content-Type':'application/json'},
+        body: JSON.stringify({ email, password, characterName: name })
+      });
+      const data = await res.json();
+      authStatus.textContent = data.error || data.message;
     };
-    document.getElementById('btn-login').onclick=async()=>{
-      const e=emailI.value.trim(), p=passI.value;
-      if(!e||!p) return authS.textContent='E‑mail e senha são obrigatórios';
-      const res=await fetch(`${SERVER_URL}/login`,{method:'POST',headers:{'Content-Type':'application/json'},body:JSON.stringify({email:e,password:p})});
-      const d=await res.json(); if(d.error) return authS.textContent=d.error;
-      token=d.token; authS.textContent='Autenticado!'; authDiv.style.display='none'; socket.disconnect(); initSocket();
+
+    document.getElementById('btn-login').onclick = async () => {
+      const email = emailInput.value.trim();
+      const password = passwordInput.value;
+      if (!email || !password) {
+        authStatus.textContent = 'E‑mail e senha são obrigatórios';
+        return;
+      }
+      const res = await fetch(`${SERVER_URL}/login`, {
+        method: 'POST', headers: {'Content-Type':'application/json'},
+        body: JSON.stringify({ email, password })
+      });
+      const data = await res.json();
+      if (data.error) {
+        authStatus.textContent = data.error;
+        return;
+      }
+      token = data.token;
+      authStatus.textContent = 'Autenticado!';
+      authDiv.style.display = 'none';
+      socket.disconnect();
+      initSocket();
     };
 
-    function initSocket(){
-      const opts=token?{auth:{token}}:{}; socket=io(SERVER_URL,opts);
-      socket.on('connect_error',err=>statusEl.textContent='Erro: '+err.message);
-      socket.on('connect',()=>{selfId=socket.id; statusEl.textContent=token?'Conectado como jogador':'Conectado como espectador';});
-      socket.on('playerMoved',d=>{ if(token) players[d.id]=d; });
-      socket.on('playerDisconnected',id=>{ delete players[id]; });
+    // === [2,11-16] Network & Socket.IO Module ===
+    function initSocket() {
+      const opts = token ? { auth: { token } } : {};
+      socket = io(SERVER_URL, opts);
+      socket.on('connect_error', err => statusEl.textContent = 'Erro: ' + err.message);
+      socket.on('connect', () => {
+        selfId = socket.id;
+        statusEl.textContent = token ? 'Conectado como jogador' : 'Conectado como espectador';
+      });
+      socket.on('playerMoved', msg => { players[msg.id] = msg; });
+      socket.on('playerDisconnected', id => { delete players[id]; });
     }
 
-    document.addEventListener('keydown',e=>{
-      if(!token) return;
-      const step=1;
-      if(e.key==='a'){ vel.x=-5; }
-      if(e.key==='d'){ vel.x=5; }
-      if(e.key==='w' && Math.abs(vel.y)<1){ vel.y=jumpPower; }
+    initSocket();
+
+    // === [5,34-37] Input Handlers Module ===
+    document.addEventListener('keydown', e => {
+      if (!token) return;
+      if (e.key === 'a') vel.x = -5;
+      if (e.key === 'd') vel.x = 5;
+      if (e.key === 'w' && Math.abs(vel.y) < 1) vel.y = -12; // jump
     });
-    document.addEventListener('keyup',e=>{ if(e.key==='a'||e.key==='d') vel.x=0; });
+    document.addEventListener('keyup', e => {
+      if (!token) return;
+      if (e.key === 'a' || e.key === 'd') vel.x = 0;
+    });
 
-    function gameLoop(){
-      // physics
-      vel.y+=gravity; pos.x+=vel.x; pos.y+=vel.y;
-      // floor/collision
-      if(pos.y>canvas.height-20){ pos.y=canvas.height-20; vel.y=0; }
-      pos.x=Math.max(0,Math.min(canvas.width,pos.x));
-      if(socket && socket.connected && token) socket.emit('move', { x:pos.x, y:pos.y });
+    // === [29-32] Physics Module ===
+    const gravity = 0.5;
+    let pos = { x: 150, y: 500 }, vel = { x: 0, y: 0 };
 
-      // draw
-      ctx.clearRect(0,0,canvas.width,canvas.height);
-      ctx.strokeStyle='green'; for(let i=0;i<=6;i++){ctx.beginPath();ctx.moveTo(i*cellW,0);ctx.lineTo(i*cellW,canvas.height);ctx.stroke();}
-      for(let j=0;j<=3;j++){ctx.beginPath();ctx.moveTo(0,j*cellH);ctx.lineTo(canvas.width,j*cellH);ctx.stroke();}
-      if(token){ ctx.fillStyle='lime'; for(const id in players){ if(id!==selfId){ const p=players[id]; ctx.fillRect(p.x-10,p.y-10,20,20); }} }
-      ctx.fillStyle= token?'red':'#555'; ctx.fillRect(pos.x-15,pos.y-15,30,30);
+    function updatePhysics() {
+      vel.y += gravity;
+      pos.x += vel.x;
+      pos.y += vel.y;
+      if (pos.y > canvas.height - 20) { pos.y = canvas.height - 20; vel.y = 0; }
+      pos.x = Math.max(0, Math.min(canvas.width, pos.x));
+      if (token && socket.connected) socket.emit('move', { x: pos.x, y: pos.y });
+    }
+
+    // === [18-21] Rendering & Camera Module ===
+    const canvas = document.getElementById('game');
+    const ctx = canvas.getContext('2d');
+    const cellW = canvas.width / 6, cellH = canvas.height / 3;
+
+    function renderScene() {
+      ctx.clearRect(0, 0, canvas.width, canvas.height);
+      ctx.strokeStyle = 'green';
+      for (let i = 0; i <= 6; i++) {
+        ctx.beginPath(); ctx.moveTo(i * cellW, 0); ctx.lineTo(i * cellW, canvas.height); ctx.stroke();
+      }
+      for (let j = 0; j <= 3; j++) {
+        ctx.beginPath(); ctx.moveTo(0, j * cellH); ctx.lineTo(canvas.width, j * cellH); ctx.stroke();
+      }
+    }
+
+    // === [31-33] Player Rendering Module ===
+    function renderPlayers() {
+      // others
+      ctx.fillStyle = 'lime';
+      for (const id in players) {
+        if (id === selfId) continue;
+        const p = players[id];
+        ctx.fillRect(p.x - 10, p.y - 10, 20, 20);
+      }
+      // self
+      ctx.fillStyle = token ? 'red' : '#555';
+      ctx.fillRect(pos.x - 15, pos.y - 15, 30, 30);
+    }
+
+    // === [41] Main Loop ===
+    function gameLoop() {
+      updatePhysics();
+      renderScene();
+      renderPlayers();
       requestAnimationFrame(gameLoop);
     }
+
+    requestAnimationFrame(gameLoop);
   </script>
 </body>
 </html>
