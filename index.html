@@ -79,20 +79,21 @@
     // === [5,34-37] Input Handlers Module ===
     document.addEventListener('keydown', e => {
       if (!token) return;
-      if (e.key === 'a') vel.x = -5;  // move left
-      if (e.key === 'd') vel.x = 5;   // move right
-      if (e.key === 'w' && Math.abs(vel.y) < 1) vel.y = -12; // jump [5,37]
-      if (e.key === ' ') vel.y = -12; // jump space [5,36]
-      if (e.key === '1') zoomLevel = 1; // zoom out [3,19]
-      if (e.key === '2') zoomLevel = 2; // zoom in [3,20]
+      if (e.key === 'a') vel.x = -5;
+      if (e.key === 'd') vel.x = 5;
+      if (e.key === 'w' && Math.abs(vel.y) < 1) vel.y = -12;
+      if (e.key === ' ') vel.y = -12;
+      if (e.key === '1') zoomLevel = 1;
+      if (e.key === '2') zoomLevel = 2;
     });
     document.addEventListener('keyup', e => { if (!token) return; if (e.key === 'a' || e.key === 'd') vel.x = 0; });
 
-    // === [29-32] Physics Module ===
+    // === [29-32] Physics Module with corrected gravity map ===
+    // Grid: 6 cols x 3 rows; inverted gravity in top-right cell [row 0, col 5]
     const gravityMap = [
-      [1, 1, 1, 1],
-      [1, 1, 1, 1],
-      [1, 1, 1, -1]  // inverted gravity in last cell of first row [4,32]
+      [1, 1, 1, 1, 1, -1],  // inverted in last cell of row 0
+      [1, 1, 1, 1, 1,  1],
+      [1, 1, 1, 1, 1,  1]
     ];
     const baseGravity = 0.5;
     function getCurrentGravity() {
@@ -102,9 +103,9 @@
       }
       return baseGravity;
     }
-    let pos = { x: 150, y: 500 }, vel = { x: 0, y: 0 };  
+    let pos = { x: 150, y: 500 }, vel = { x: 0, y: 0 };
     function updatePhysics() {
-      vel.y += getCurrentGravity(); // variable gravity
+      vel.y += getCurrentGravity();
       pos.x += vel.x; pos.y += vel.y;
       if (pos.y > canvas.height - 20) { pos.y = canvas.height - 20; vel.y = 0; }
       pos.x = Math.max(0, Math.min(canvas.width, pos.x));
@@ -144,9 +145,3 @@
   </script>
 </body>
 </html>
-
-    requestAnimationFrame(gameLoop);
-  </script>
-</body>
-</html>
-
