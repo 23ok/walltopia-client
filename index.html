@@ -43,50 +43,28 @@
     let selfId;
     
     // === [1,6,7] Authentication Module ===
-    const emailInput      = document.getElementById('email');
-    const passwordInput   = document.getElementById('password');
-    const nameInput       = document.getElementById('characterName');
-    const authStatus      = document.getElementById('auth-status');
-    const statusEl        = document.getElementById('status');
-    const authDiv         = document.getElementById('auth');
+    const emailInput    = document.getElementById('email');
+    const passwordInput = document.getElementById('password');
+    const nameInput     = document.getElementById('characterName');
+    const authStatus    = document.getElementById('auth-status');
+    const statusEl      = document.getElementById('status');
+    const authDiv       = document.getElementById('auth');
 
     document.getElementById('btn-register').onclick = async () => {
-      const email = emailInput.value.trim();
-      const password = passwordInput.value;
-      const name = nameInput.value.trim();
-      if (!email || !password || !name) {
-        authStatus.textContent = 'Preencha todos os campos';
-        return;
-      }
-      const res = await fetch(`${SERVER_URL}/register`, {
-        method: 'POST', headers: {'Content-Type':'application/json'},
-        body: JSON.stringify({ email, password, characterName: name })
-      });
+      const email = emailInput.value.trim(), password = passwordInput.value, name = nameInput.value.trim();
+      if (!email || !password || !name) { authStatus.textContent = 'Preencha todos os campos'; return; }
+      const res = await fetch(`${SERVER_URL}/register`, { method: 'POST', headers: {'Content-Type':'application/json'}, body: JSON.stringify({ email, password, characterName: name }) });
       const data = await res.json();
       authStatus.textContent = data.error || data.message;
     };
 
     document.getElementById('btn-login').onclick = async () => {
-      const email = emailInput.value.trim();
-      const password = passwordInput.value;
-      if (!email || !password) {
-        authStatus.textContent = 'E‑mail e senha são obrigatórios';
-        return;
-      }
-      const res = await fetch(`${SERVER_URL}/login`, {
-        method: 'POST', headers: {'Content-Type':'application/json'},
-        body: JSON.stringify({ email, password })
-      });
+      const email = emailInput.value.trim(), password = passwordInput.value;
+      if (!email || !password) { authStatus.textContent = 'E‑mail e senha são obrigatórios'; return; }
+      const res = await fetch(`${SERVER_URL}/login`, { method: 'POST', headers: {'Content-Type':'application/json'}, body: JSON.stringify({ email, password }) });
       const data = await res.json();
-      if (data.error) {
-        authStatus.textContent = data.error;
-        return;
-      }
-      token = data.token;
-      authStatus.textContent = 'Autenticado!';
-      authDiv.style.display = 'none';
-      socket.disconnect();
-      initSocket();
+      if (data.error) { authStatus.textContent = data.error; return; }
+      token = data.token; authStatus.textContent = 'Autenticado!'; authDiv.style.display = 'none'; socket.disconnect(); initSocket();
     };
 
     // === [2,11-16] Network & Socket.IO Module ===
@@ -94,14 +72,10 @@
       const opts = token ? { auth: { token } } : {};
       socket = io(SERVER_URL, opts);
       socket.on('connect_error', err => statusEl.textContent = 'Erro: ' + err.message);
-      socket.on('connect', () => {
-        selfId = socket.id;
-        statusEl.textContent = token ? 'Conectado como jogador' : 'Conectado como espectador';
-      });
+      socket.on('connect', () => { selfId = socket.id; statusEl.textContent = token ? 'Conectado como jogador' : 'Conectado como espectador'; });
       socket.on('playerMoved', msg => { players[msg.id] = msg; });
       socket.on('playerDisconnected', id => { delete players[id]; });
     }
-
     initSocket();
 
     // === [5,34-37] Input Handlers Module ===
@@ -110,63 +84,56 @@
       if (e.key === 'a') vel.x = -5;
       if (e.key === 'd') vel.x = 5;
       if (e.key === 'w' && Math.abs(vel.y) < 1) vel.y = -12; // jump
+      if (e.key === '1') zoomLevel = 1;
+      if (e.key === '2') zoomLevel = 2;
     });
-    document.addEventListener('keyup', e => {
-      if (!token) return;
-      if (e.key === 'a' || e.key === 'd') vel.x = 0;
-    });
+    document.addEventListener('keyup', e => { if (!token) return; if (e.key === 'a' || e.key === 'd') vel.x = 0; });
 
     // === [29-32] Physics Module ===
     const gravity = 0.5;
     let pos = { x: 150, y: 500 }, vel = { x: 0, y: 0 };
-
     function updatePhysics() {
-      vel.y += gravity;
-      pos.x += vel.x;
-      pos.y += vel.y;
+      vel.y += gravity; pos.x += vel.x; pos.y += vel.y;
       if (pos.y > canvas.height - 20) { pos.y = canvas.height - 20; vel.y = 0; }
       pos.x = Math.max(0, Math.min(canvas.width, pos.x));
       if (token && socket.connected) socket.emit('move', { x: pos.x, y: pos.y });
     }
 
-    // === [18-21] Rendering & Camera Module ===
-    const canvas = document.getElementById('game');
-    const ctx = canvas.getContext('2d');
+    // === [3,19-22] Zoom & Camera Module ===
+    const canvas = document.getElementById('game'), ctx = canvas.getContext('2d');
     const cellW = canvas.width / 6, cellH = canvas.height / 3;
-
+    let zoomLevel = 1, camX = 0, camY = 0;
+    function applyCamera() {
+      if (zoomLevel === 1) {
+        ctx.setTransform(1, 0, 0, 1, 0, 0);
+      } else {
+        const scaleX = canvas.width / cellW;
+        const scaleY = canvas.height / cellH;
+        const col = Math.floor(pos.x / cellW), row = Math.floor(pos.y / cellH);
+        const targetX = col * cellW, targetY = row * cellH;
+        camX += (targetX - camX) * 0.1;
+        camY += (targetY - camY) * 0.1;
+        ctx.setTransform(scaleX, 0, 0, scaleY, -camX * scaleX, -camY * scaleY);
+      }
+    }
     function renderScene() {
+      applyCamera();
       ctx.clearRect(0, 0, canvas.width, canvas.height);
       ctx.strokeStyle = 'green';
-      for (let i = 0; i <= 6; i++) {
-        ctx.beginPath(); ctx.moveTo(i * cellW, 0); ctx.lineTo(i * cellW, canvas.height); ctx.stroke();
-      }
-      for (let j = 0; j <= 3; j++) {
-        ctx.beginPath(); ctx.moveTo(0, j * cellH); ctx.lineTo(canvas.width, j * cellH); ctx.stroke();
-      }
+      for (let i = 0; i <= 6; i++) { ctx.beginPath(); ctx.moveTo(i * cellW, 0); ctx.lineTo(i * cellW, canvas.height); ctx.stroke(); }
+      for (let j = 0; j <= 3; j++) { ctx.beginPath(); ctx.moveTo(0, j * cellH); ctx.lineTo(canvas.width, j * cellH); ctx.stroke(); }
     }
 
     // === [31-33] Player Rendering Module ===
     function renderPlayers() {
-      // others
       ctx.fillStyle = 'lime';
-      for (const id in players) {
-        if (id === selfId) continue;
-        const p = players[id];
-        ctx.fillRect(p.x - 10, p.y - 10, 20, 20);
-      }
-      // self
+      for (const id in players) { if (id !== selfId) { const p = players[id]; ctx.fillRect(p.x - 10, p.y - 10, 20, 20); }}
       ctx.fillStyle = token ? 'red' : '#555';
       ctx.fillRect(pos.x - 15, pos.y - 15, 30, 30);
     }
 
     // === [41] Main Loop ===
-    function gameLoop() {
-      updatePhysics();
-      renderScene();
-      renderPlayers();
-      requestAnimationFrame(gameLoop);
-    }
-
+    function gameLoop() { updatePhysics(); renderScene(); renderPlayers(); requestAnimationFrame(gameLoop); }
     requestAnimationFrame(gameLoop);
   </script>
 </body>
