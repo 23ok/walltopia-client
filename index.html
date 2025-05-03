@@ -36,13 +36,13 @@
 
   <script src="https://cdn.socket.io/4.6.1/socket.io.min.js"></script>
   <script>
-    // === [1,51] Initialization & Configuration ===
+    // === Initialization & Configuration ===
     const SERVER_URL = 'https://0803cfd3-ab2a-4b96-bf35-eb788a29f988-00-2jhigdrm8gnnu.worf.replit.dev';
     let socket, token;
     const players = {};
     let selfId;
     
-    // === [1,6,7] Authentication Module ===
+    // === Authentication Module ===
     const emailInput    = document.getElementById('email');
     const passwordInput = document.getElementById('password');
     const nameInput     = document.getElementById('characterName');
@@ -65,7 +65,7 @@
       token = data.token; authStatus.textContent = 'Autenticado!'; authDiv.style.display = 'none'; socket.disconnect(); initSocket();
     };
 
-    // === [2,11-16] Network & Socket.IO Module ===
+    // === Network & Socket.IO Module ===
     function initSocket() {
       const opts = token ? { auth: { token } } : {};
       socket = io(SERVER_URL, opts);
@@ -76,7 +76,8 @@
     }
     initSocket();
 
-    // === [5,34-37] Input Handlers Module ===
+    // === Input Handlers Module ===
+    let pos = { x: 150, y: 500 }, vel = { x: 0, y: 0 };
     document.addEventListener('keydown', e => {
       if (!token) return;
       if (e.key === 'a') vel.x = -5;
@@ -87,63 +88,64 @@
     });
     document.addEventListener('keyup', e => { if (!token) return; if (e.key === 'a' || e.key === 'd') vel.x = 0; });
 
-    // === [29-32] Physics Module with corrected gravity map ===
-    // Grid: 6 cols x 3 rows; inverted gravity in bottom-right cell [row 2, col 5]
+    // === Physics Module ===
     const gravityMap = [
-      [1, 1, 1, 1, 1,  1],  // top row
-      [1, 1, 1, 1, 1,  1],  // middle row
-      [1, 1, 1, 1, 1, -1]   // bottom row, invert in last cell
+      [1,1,1,1,1,1],
+      [1,1,1,1,1,1],
+      [1,1,1,1,1,-1]
     ];
     const baseGravity = 0.5;
     function getCurrentGravity() {
       const col = Math.floor(pos.x / cellW), row = Math.floor(pos.y / cellH);
-      if (row >= 0 && row < 3 && col >= 0 && col < 6) {
-        return baseGravity * gravityMap[row][col];
-      }
+      if (row>=0&&row<3&&col>=0&&col<6) return baseGravity * gravityMap[row][col];
       return baseGravity;
     }
-    let pos = { x: 150, y: 500 }, vel = { x: 0, y: 0 };
     function updatePhysics() {
-      vel.y += getCurrentGravity();
-      pos.x += vel.x; pos.y += vel.y;
-      // floor collision
+      vel.y += getCurrentGravity(); pos.x += vel.x; pos.y += vel.y;
       if (pos.y > canvas.height - 20) { pos.y = canvas.height - 20; vel.y = 0; }
-      // ceiling collision
       if (pos.y < 20) { pos.y = 20; vel.y = 0; }
-      // horizontal bounds
       pos.x = Math.max(0, Math.min(canvas.width, pos.x));
       if (token && socket.connected) socket.emit('move', { x: pos.x, y: pos.y });
     }
 
-    // === [3,19-22] Zoom & Camera Module ===
+    // === Zoom & Camera Module ===
     const canvas = document.getElementById('game'), ctx = canvas.getContext('2d');
     const cellW = canvas.width / 6, cellH = canvas.height / 3;
     let zoomLevel = 1, camX = 0, camY = 0;
     function applyCamera() {
       if (zoomLevel === 1) {
-        ctx.setTransform(1, 0, 0, 1, 0, 0);
+        ctx.setTransform(1,0,0,1,0,0);
       } else {
         const scaleX = canvas.width / cellW, scaleY = canvas.height / cellH;
         const col = Math.floor(pos.x / cellW), row = Math.floor(pos.y / cellH);
         const targetX = col * cellW, targetY = row * cellH;
         camX += (targetX - camX) * 0.1; camY += (targetY - camY) * 0.1;
-        ctx.setTransform(scaleX, 0, 0, scaleY, -camX * scaleX, -camY * scaleY);
+        ctx.setTransform(scaleX,0,0,scaleY,-camX*scaleX,-camY*scaleY);
       }
     }
     function renderScene() {
-      applyCamera(); ctx.clearRect(0, 0, canvas.width, canvas.height);
+      applyCamera(); ctx.clearRect(0,0,canvas.width,canvas.height);
       ctx.strokeStyle = 'green';
-      for (let i = 0; i <= 6; i++) { ctx.beginPath(); ctx.moveTo(i * cellW, 0); ctx.lineTo(i * cellW, canvas.height); ctx.stroke(); }
-      for (let j = 0; j <= 3; j++) { ctx.beginPath(); ctx.moveTo(0, j * cellH); ctx.lineTo(canvas.width, j * cellH); ctx.stroke(); }
+      for (let i=0;i<=6;i++){ctx.beginPath();ctx.moveTo(i*cellW,0);ctx.lineTo(i*cellW,canvas.height);ctx.stroke();}
+      for (let j=0;j<=3;j++){ctx.beginPath();ctx.moveTo(0,j*cellH);ctx.lineTo(canvas.width,j*cellH);ctx.stroke();}
     }
 
-    // === [31-33] Player Rendering Module ===
+    // === Player Rendering Module ===
     function renderPlayers() {
-      ctx.fillStyle = 'lime'; for (const id in players) { if (id !== selfId) { const p = players[id]; ctx.fillRect(p.x - 10, p.y - 10, 20, 20); }}
-      ctx.fillStyle = token ? 'red' : '#555'; ctx.fillRect(pos.x - 15, pos.y - 15, 30, 30);
+      // outros jogadores
+      ctx.fillStyle = 'lime';
+      for (const id in players) {
+        if (id !== selfId) {
+          const p = players[id]; ctx.fillRect(p.x-10,p.y-10,20,20);
+        }
+      }
+      // self: desenha apenas se estiver autenticado
+      if (token) {
+        ctx.fillStyle = 'red'; ctx.fillRect(pos.x-15,pos.y-15,30,30);
+      }
     }
 
-    // === [41] Main Loop ===
+    // === Main Loop ===
     function gameLoop() { updatePhysics(); renderScene(); renderPlayers(); requestAnimationFrame(gameLoop); }
     requestAnimationFrame(gameLoop);
   </script>
